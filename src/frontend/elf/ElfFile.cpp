@@ -1,4 +1,4 @@
-#include "elf/ElfFile.h"
+#include "frontend/elf/ElfFile.h"
 
 #include <algorithm>
 #include <array>
@@ -10,7 +10,10 @@ namespace mykisah::elf {
 namespace {
 
 constexpr std::size_t ELF64_HEADER_SIZE = 64;
+constexpr std::size_t ELF64_PROGRAM_HEADER_SIZE = 56;
 constexpr std::size_t ELF64_SECTION_HEADER_SIZE = 64;
+constexpr uint16_t ET_DYN = 3;
+constexpr uint32_t PT_LOAD = 1;
 
 uint16_t read_u16_le(const std::vector<uint8_t>& bytes, std::size_t offset) {
     return static_cast<uint16_t>(bytes.at(offset)) |
@@ -179,13 +182,59 @@ void validate_file_range(const std::vector<uint8_t>& bytes, const ElfSection& se
     }
 }
 
+ElfImageInfo parse_image_info_from_bytes(const std::vector<uint8_t>& bytes) {
+    if (bytes.size() < ELF64_HEADER_SIZE) {
+        throw std::runtime_error("file is too small to contain an ELF64 header");
+    }
+
+    ElfImageInfo info;
+    info.elf_type = read_u16_le(bytes, 16);
+    info.is_pie = info.elf_type == ET_DYN;
+
+    const uint64_t program_header_offset = read_u64_le(bytes, 32);
+    const uint16_t program_header_entry_size = read_u16_le(bytes, 54);
+    const uint16_t program_header_count = read_u16_le(bytes, 56);
+
+    if (program_header_entry_size < ELF64_PROGRAM_HEADER_SIZE) {
+        throw std::runtime_error("unsupported ELF program header size");
+    }
+
+    const uint64_t table_size = static_cast<uint64_t>(program_header_entry_size) * program_header_count;
+    if (program_header_offset > bytes.size() || table_size > bytes.size() - program_header_offset) {
+        throw std::runtime_error("program header table extends beyond end of file");
+    }
+
+    bool found_load = false;
+    uint64_t minimum_load_address = 0;
+    for (uint16_t index = 0; index < program_header_count; ++index) {
+        const uint64_t offset = program_header_offset + static_cast<uint64_t>(index) * program_header_entry_size;
+        if (read_u32_le(bytes, static_cast<std::size_t>(offset)) != PT_LOAD) {
+            continue;
+        }
+
+        const uint64_t virtual_address = read_u64_le(bytes, static_cast<std::size_t>(offset + 16));
+        if (!found_load || virtual_address < minimum_load_address) {
+            minimum_load_address = virtual_address;
+            found_load = true;
+        }
+    }
+
+    info.image_base = found_load ? minimum_load_address : 0;
+    return info;
+}
+
 } // namespace
+
+ElfImageInfo ElfFileParser::parse_image_info(const std::string& path) {
+    return parse_image_info_from_bytes(read_all_bytes(path));
+}
 
 ElfFile ElfFileParser::parse_sections(const std::string& path) {
     const auto bytes = read_all_bytes(path);
     auto all_sections = parse_all_sections(bytes);
 
     ElfFile elf_file;
+    elf_file.image = parse_image_info_from_bytes(bytes);
     for (const auto& section : all_sections) {
         if (is_requested_section(section.name)) {
             elf_file.sections.push_back(section);
@@ -206,6 +255,7 @@ std::vector<Function> ElfFileParser::parse_functions(const std::string& path) {
 
     const auto bytes = read_all_bytes(path);
     const auto sections = parse_all_sections(bytes);
+    const auto image = parse_image_info_from_bytes(bytes);
 
     const auto* symtab = find_section_by_name(sections, ".symtab");
     if (symtab == nullptr) {
@@ -247,6 +297,8 @@ std::vector<Function> ElfFileParser::parse_functions(const std::string& path) {
             static_cast<std::size_t>(string_table.file_offset + name_offset),
             static_cast<std::size_t>(string_table.file_offset + string_table.size));
         function.address = value;
+        function.location.virtual_address = value;
+        function.location.image_relative = value >= image.image_base ? value - image.image_base : value;
         function.size = size;
 
         if (function.name.empty()) {

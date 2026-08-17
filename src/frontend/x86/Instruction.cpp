@@ -1,4 +1,4 @@
-#include "x86/Instruction.h"
+#include "frontend/x86/Instruction.h"
 
 #include <array>
 
@@ -93,6 +93,8 @@ std::string opcode_name(Opcode opcode, ConditionCode condition) {
     switch (opcode) {
         case Opcode::Invalid:
             return "invalid";
+        case Opcode::Nop:
+            return "nop";
         case Opcode::Mov:
             return "mov";
         case Opcode::Lea:
@@ -105,12 +107,20 @@ std::string opcode_name(Opcode opcode, ConditionCode condition) {
             return "add";
         case Opcode::Sub:
             return "sub";
+        case Opcode::And:
+            return "and";
+        case Opcode::Xor:
+            return "xor";
         case Opcode::Imul:
             return "imul";
         case Opcode::Cmp:
             return "cmp";
         case Opcode::Test:
             return "test";
+        case Opcode::Cmov:
+            return "cmov" + opcode_name(Opcode::Jcc, condition).substr(1);
+        case Opcode::Setcc:
+            return "set" + opcode_name(Opcode::Jcc, condition).substr(1);
         case Opcode::Jmp:
             return "jmp";
         case Opcode::Jcc:
@@ -141,6 +151,10 @@ std::string opcode_name(Opcode opcode, ConditionCode condition) {
     }
 
     return "unknown";
+}
+
+bool is_valid_instruction(const Instruction& instruction) {
+    return instruction.opcode != Opcode::Invalid;
 }
 
 } // namespace mykisah::x86

@@ -4,137 +4,118 @@
 
 ---
 
->I don't really have joy in this anymore. Goodluck to the rest^^
+> I don't really have joy in this anymore. Goodluck to the rest^^
 
-Decompiler with disassembly, control-flow reconstruction, C++ code generation, function navigation, call graph visualization, and binary patching.
+A simplified x86-64 ELF decompiler for C++ binaries, built with C++17 and Qt 6. The application provides C++-like reconstruction, assembly/opcode display, function navigation, call graph visualization, PIE-aware addresses, and instruction-level binary patching.
 
-This project will target on C++ executable binary file and create a similar decompiled output as a C++ source code. A unique feature that C++ has is optimization of the code generation process, hence making it difficult to reverse engineer.
+## Features
 
----
+- ELF64 little-endian x86-64 loading
+- ELF section and function-symbol parsing
+- Incremental x86-64 instruction decoding
+- C++-like function reconstruction
+- Function signature and basic type hints
+- Basic control-flow recovery
+- Assembly and opcode display
+- Searchable Qt function browser
+- Direct-call navigation
+- Interactive call graph
+- PIE and initial `-O2`/`-O3` support
+- Same-size or shorter binary patches with NOP padding
+
+Unsupported instructions and uncertain semantics are shown explicitly instead of being silently invented.
+
 ## Project Structure
 
 ```text
 src/
-├── elf/          Binary frontend ELF parsing/validation
-├── x86/          Future x86-64 instruction decoder
-└── main.cpp      Milestone CLI entry point
+├── application/                 Pipeline coordination and binary patching
+├── frontend/
+│   ├── elf/                     ELF loading and address handling
+│   └── x86/                     Instruction model, decoder, and formatter
+├── decompiler/
+│   ├── ir/                      Canonical IR and lifting
+│   ├── analysis/                Symbolic, signature, and type analysis
+│   ├── controlflow/             Basic blocks, CFG, and structuring
+│   ├── ast/                     High-level AST
+│   └── graph/                   Call graph model
+└── presentation/
+    ├── cpp/                     C++-like emitter
+    ├── cli/                     CLI application
+    └── gui/                     Qt desktop application
 
-tests/corpus/     Generated C++ test programs
+tests/
+└── corpus/                      C++ regression sources
 ```
 
-___
-## Status on Task
+## Requirements
 
-### Milestone 1 — ELF Validation
+- C++17 compiler
+- CMake 3.16 or newer
+- Qt 6 Core, Gui, and Widgets development packages
 
-Implemented a baseline ELF validator that reads a file and reports whether it is:
-
-- an ELF file,
-- ELF64,
-- little endian,
-- x86-64.
-
-This was intentionally only the first binary-frontend step.
-
-### Milestone 2 — ELF Sections
-
-Implemented section-header parsing and display for the baseline sections needed by later milestones:
-
-- `.text`
-- `.symtab`
-- `.strtab`
-- `.rodata`
-- `.data`
-
-The CLI now prints each discovered section's name, file offset, virtual address, and size.
-
-### Milestone 3 — Function Symbols
-
-Implemented `.symtab` parsing for ELF symbols whose type is `STT_FUNC`. Function symbols are represented as:
-
-```cpp
-struct Function {
-    std::string name;
-    uint64_t address;
-    uint64_t size;
-    std::vector<uint8_t> bytes;
-};
-```
-
-### Milestone 4 — Function Byte Extraction
-
-Implemented virtual-address to file-offset mapping using allocated ELF sections. Each discovered function now receives its machine-code bytes in `Function::bytes`.
-
-The frontend still does not use function-discovery heuristics, decode instructions, lift IR, or decompile yet.
-
-### Milestone 5 — Instruction Representation
-
-Decision chosen: **Option C**, a compact structured instruction representation designed to grow into a richer x86 model later.
-
-Implemented in `src/x86/Instruction.h` and `src/x86/Instruction.cpp`:
-
-- `Opcode`
-- `Operand`
-- `Register`
-- operand width
-- immediate operands
-- memory operands with base/index/scale/displacement/RIP-relative support
-- relative branch/call targets
-- raw instruction bytes
-- instruction address
-- retained REX/ModR/M/SIB fields for future decoder/debugging work
-- basic control-flow flags
-
-This decision should eventually be documented in the README implementation-strategy section with the reason: the decompiler core must consume structured instructions, not parse assembly strings.
-
-Build:
+## Build
 
 ```bash
 cmake -S . -B build
 cmake --build build
 ```
 
-Create the first generated test binary:
-
-```bash
-g++ tests/corpus/constant.cpp -O1 -fno-inline -fno-omit-frame-pointer -no-pie -o build/constant_O1_nopie
-```
-
-Run:
-
-```bash
-./build/my-kisah build/constant_O1_nopie
-```
-
-Expected output includes:
+Generated applications:
 
 ```text
-ELF magic: yes
-ELF64: yes
-Endian: little
-Architecture: x86-64
-
-Sections:
-Name           File Offset   Virtual Address          Size
-.text       0x...
-.symtab     0x...
-.strtab     0x...
-.rodata     0x...
-.data       0x...
-
-Functions:
-Name                                       Address          Size   Bytes Extracted
-constant                            0x0000000000401106  0x00000000000b                11
-main                                0x0000000000401111  0x00000000000b                11
+build/my-kisah       CLI decompiler
+build/my-kisah-gui   Qt desktop decompiler
 ```
 
----
-## Notes on Documentation
-Documentation are available in `my-kisah/docs/`.
+## Run
 
----
-## References:
-- C++ Compilers?: https://stackoverflow.com/questions/205059/is-there-a-c-decompiler
-- Github Example on C Decompiler: https://github.com/ZhangZhuoSJTU/tiny-dec
-- Static Single Assignment for Decompilation by Michael James Van Emmerik
-- Just Why: https://stackoverflow.com/questions/36525356/why-is-there-no-accurate-c-decompiler
+Start the desktop application:
+
+```bash
+./build/my-kisah-gui
+```
+
+Open an ELF binary directly:
+
+```bash
+./build/my-kisah-gui <binary>
+```
+
+Run the CLI:
+
+```bash
+./build/my-kisah <binary>
+```
+
+The baseline input configuration is:
+
+```bash
+g++ <input.cpp> \
+    -O1 \
+    -fno-inline \
+    -fno-omit-frame-pointer \
+    -no-pie \
+    -o <binary>
+```
+
+Generated corpus binaries are test inputs and are not part of the CMake application build.
+
+## Documentation
+
+Detailed documentation is available in [`docs/README.md`](docs/README.md), including:
+
+- complete decompiler process
+- implementation strategies and design decisions
+- build and usage guide
+- generated test cases and results
+- bonus implementations
+- supported behavior and known limitations
+
+## References
+
+- [Why is there no accurate C decompiler?](https://stackoverflow.com/questions/36525356/why-is-there-no-accurate-c-decompiler)
+- [Is there a C++ decompiler?](https://stackoverflow.com/questions/205059/is-there-a-c-decompiler)
+- [tiny-dec](https://github.com/ZhangZhuoSJTU/tiny-dec)
+- Static Single Assignment for Decompilation — Michael James Van Emmerik
+- [Combining SSA instructions into statements](https://stackoverflow.com/questions/73245312/how-decompilers-combine-multiple-ssa-form-instructions-into-one-statement)

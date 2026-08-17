@@ -32,6 +32,7 @@ enum class Register {
 
 enum class Opcode {
     Invalid,
+    Nop,
 
     Mov,
     Lea,
@@ -39,9 +40,13 @@ enum class Opcode {
     Pop,
     Add,
     Sub,
+    And,
+    Xor,
     Imul,
     Cmp,
     Test,
+    Cmov,
+    Setcc,
     Jmp,
     Jcc,
     Call,
@@ -135,5 +140,6 @@ struct Instruction {
 
 [[nodiscard]] std::string register_name(Register reg, uint16_t width_bits);
 [[nodiscard]] std::string opcode_name(Opcode opcode, ConditionCode condition = ConditionCode::None);
+[[nodiscard]] bool is_valid_instruction(const Instruction& instruction);
 
 } // namespace mykisah::x86

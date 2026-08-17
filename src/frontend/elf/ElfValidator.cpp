@@ -1,4 +1,4 @@
-#include "elf/ElfValidator.h"
+#include "frontend/elf/ElfValidator.h"
 
 #include <array>
 #include <fstream>
